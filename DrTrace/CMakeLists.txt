@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.6)
 
-set(DynamoRIO_DIR "/home/pavel/DynamoRIO/cmake")
+set(DynamoRIO_DIR "/home/pavel/DynamoRIO/cmake") # set your path
 
 project(MyDRIOproject)
 
