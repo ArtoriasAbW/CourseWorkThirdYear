@@ -5,6 +5,7 @@
 static modules_info mi("module.txt");
 
 static file_t logfd;
+static FILE *logfile;
 static app_pc cur_module_loading_address = 0;
 
 #if defined(X86_64)
@@ -28,11 +29,11 @@ process_instr(app_pc instr_addr, platform_int_t offset) {
 
   dr_get_mcontext(drcontext, &mc);
   #if defined(X86_64)
-  dr_fprintf(logfd, "[%p]:off=%ld %03X - %-6s ", instr_addr, offset, opcode, opcode_name);
-  dr_fprintf(logfd, "REGS: rax=%lx, rbx=%lx, rcx=%lx, rdx=%lx, rflags=%lx\n", mc.rax, mc.rbx, mc.rcx, mc.rdx, mc.rflags);
+  fprintf(logfile, "[%p]:off=%ld %03X - %-6s ", instr_addr, offset, opcode, opcode_name);
+  fprintf(logfile, "REGS: rax=%lx, rbx=%lx, rcx=%lx, rdx=%lx, rflags=%lx\n", mc.rax, mc.rbx, mc.rcx, mc.rdx, mc.rflags);
   #elif defined(X86_32)
-  dr_fprintf(logfd, "[%p]:off=%d %03X - %-6s ", instr_addr, offset, opcode, opcode_name);
-  dr_fprintf(logfd, "REGS: eax=%lx, ebx=%lx, ecx=%lx, edx=%lx, eflags=%lx\n", mc.eax, mc.ebx, mc.ecx, mc.edx, mc.eflags);
+  fprintf(logfile, "[%p]:off=%d %03X - %-6s ", instr_addr, offset, opcode, opcode_name);
+  fprintf(logfile, "REGS: eax=%lx, ebx=%lx, ecx=%lx, edx=%lx, eflags=%lx\n", mc.eax, mc.ebx, mc.ecx, mc.edx, mc.eflags);
   #endif
   instr_free(drcontext, &instr);
 }
@@ -53,9 +54,9 @@ event_app_instruction(void *drcontext, void *tag,
       prev_module_idx = mi.get_module_id(ptr);
     }
     if (!prev_module_idx) {
-        dr_fprintf(logfd, "\n[%p] [thread id = %u] [code is outside modules]:\n", ptr, thread_id);
+        fprintf(logfile, "\n[%p] [thread id = %u] [code is outside modules]:\n", ptr, thread_id);
     } else {
-        dr_fprintf(logfd, "\n[%p] [thread id = %u] [module id = %d]:\n", ptr, thread_id, prev_module_idx);
+        fprintf(logfile, "\n[%p] [thread id = %u] [module id = %d]:\n", ptr, thread_id, prev_module_idx);
     }
     prev_tag = tag;
   }
@@ -78,7 +79,7 @@ event_app_instruction(void *drcontext, void *tag,
 static void 
 event_exit(void) {
     
-    log_file_close(logfd);
+    log_stream_close(logfile);
     
     bool all_unreg = true;
     all_unreg &= drmgr_unregister_bb_insertion_event(event_app_instruction);
@@ -93,7 +94,9 @@ event_exit(void) {
 
 DR_EXPORT void 
 dr_client_main(client_id_t id, int arcg, const char **argv) {
+#ifdef WINDOWS
   dr_enable_console_printing();
+#endif
   if (!drmgr_init()) { 
       dr_fprintf(STDERR, "failed to drmgr extension initialize\n");
       DR_ASSERT(false); 
@@ -113,4 +116,5 @@ dr_client_main(client_id_t id, int arcg, const char **argv) {
     dr_fprintf(STDERR, "cannot open file");
     DR_ASSERT(false);
   }
+  logfile = log_stream_from_file(logfd);
 }

@@ -23,7 +23,7 @@ private:
                                        //MAYBE: Dictionary<app_pc start, module_info> and find addr between two keys: (key_1 <= pc < key_2) & (pc<=m[key_1].end) => pc in module
     bool valid;
 public:
-    modules_info() : module_info_file(NULL), valid(false) {};
+    modules_info() : module_info_file(0), valid(false) {};
     modules_info(const char *file_name);
     modules_info &operator= (modules_info &&other) noexcept;
 
