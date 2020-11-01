@@ -1,16 +1,11 @@
-// #include "general_headers.h"
-
-#include "dr_api.h"
-#include "drmgr.h"
-#include "utils.h"
-#include "drreg.h"
-
+#include "general_headers.h"
 
 //cpp:
 #include <vector>
+//#include <map>
 
 
-typedef struct __module_info//TODO:C++
+typedef struct __module_info
 {
     uint id; //module_info valid only if (id != 0)
     app_pc start;
@@ -22,14 +17,13 @@ typedef struct __module_info//TODO:C++
 
 struct modules_info
 {
-public:
+private:
     file_t module_info_file;
     std::vector<__module_info> modules;//MAYBE:<module_info *>   |   now, while we have only 4 fields so ptr is needless  
                                        //MAYBE: Dictionary<app_pc start, module_info> and find addr between two keys: (key_1 <= pc < key_2) & (pc<=m[key_1].end) => pc in module
-private:
     bool valid;
 public:
-    modules_info() : module_info_file(0), valid(false) {};
+    modules_info() : module_info_file(NULL), valid(false) {};
     modules_info(const char *file_name);
     modules_info &operator= (modules_info &&other) noexcept;
 

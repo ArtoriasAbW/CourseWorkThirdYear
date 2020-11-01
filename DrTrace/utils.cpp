@@ -31,8 +31,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
  * DAMAGE.
  */
+#include "general_headers.h"
 
-#include "utils.h"
+#include "utils.hpp"
 #include "drx.h"
 #include <stdio.h>
 #ifdef WINDOWS
