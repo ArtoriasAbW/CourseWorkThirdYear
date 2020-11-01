@@ -33,7 +33,7 @@
  */
 #include "general_headers.h"
 
-#include "utils.hpp"
+#include "utils.h"
 #include "drx.h"
 #include <stdio.h>
 #ifdef WINDOWS
