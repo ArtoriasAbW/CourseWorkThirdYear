@@ -1,6 +1,5 @@
 #include "general_headers.h"
 #include "modules_info.hpp"
-#include "utils.h"
 
 static modules_info mi("module.txt");
 
@@ -79,7 +78,7 @@ event_app_instruction(void *drcontext, void *tag,
 static void 
 event_exit(void) {
     
-    log_stream_close(logfile);
+    fclose(logfile);
     
     bool all_unreg = true;
     all_unreg &= drmgr_unregister_bb_insertion_event(event_app_instruction);
@@ -93,7 +92,7 @@ event_exit(void) {
 }
 
 DR_EXPORT void 
-dr_client_main(client_id_t id, int arcg, const char **argv) {
+dr_client_main(client_id_t id, int argc, const char **argv) {
 #ifdef WINDOWS
   dr_enable_console_printing();
 #endif
@@ -108,13 +107,14 @@ dr_client_main(client_id_t id, int arcg, const char **argv) {
     dr_fprintf(STDERR, "bb_instrumentation_event handler wasn't created\n");
     DR_ASSERT(false);
   }
-
-
-  
-  logfd = log_file_open(id, NULL, NULL, "trace", DR_FILE_ALLOW_LARGE);
+  if (argc > 2 && strcmp(argv[1], "-tf") == 0) {
+    logfd = dr_open_file(argv[2], DR_FILE_WRITE_OVERWRITE);
+  } else {
+    logfd = dr_open_file("trace.txt", DR_FILE_WRITE_OVERWRITE);
+  }
   if (logfd == INVALID_FILE) {
     dr_fprintf(STDERR, "cannot open file");
     DR_ASSERT(false);
   }
-  logfile = log_stream_from_file(logfd);
+  logfile = fdopen(logfd, "w+");
 }

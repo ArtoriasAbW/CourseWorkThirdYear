@@ -1,0 +1,3 @@
+/home/pavel/coursework/DrTrace/CMakeFiles/rebuild_cache.dir
+/home/pavel/coursework/DrTrace/CMakeFiles/edit_cache.dir
+/home/pavel/coursework/DrTrace/CMakeFiles/programtrace.dir
