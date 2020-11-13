@@ -1,7 +1,7 @@
 #include "general_headers.h"
 #include "modules_info.hpp"
 
-static modules_info mi("module.txt");
+static modules_info mi;
 
 static file_t logfd;
 static FILE *logfile;
@@ -29,7 +29,7 @@ process_instr(app_pc instr_addr, platform_int_t offset) {
   dr_get_mcontext(drcontext, &mc);
   #if defined(X86_64)
   fprintf(logfile, "[%p]:off=%ld %03X - %-6s ", instr_addr, offset, opcode, opcode_name);
-  fprintf(logfile, "REGS: rax=%lx, rbx=%lx, rcx=%lx, rdx=%lx, rflags=%lx\n", mc.rax, mc.rbx, mc.rcx, mc.rdx, mc.rflags);
+  fprintf(logfile, "REGS: rax=%llx, rbx=%llx, rcx=%llx, rdx=%llx, rflags=%llx\n", mc.rax, mc.rbx, mc.rcx, mc.rdx, mc.rflags);
   #elif defined(X86_32)
   fprintf(logfile, "[%p]:off=%d %03X - %-6s ", instr_addr, offset, opcode, opcode_name);
   fprintf(logfile, "REGS: eax=%lx, ebx=%lx, ecx=%lx, edx=%lx, eflags=%lx\n", mc.eax, mc.ebx, mc.ecx, mc.edx, mc.eflags);
@@ -45,12 +45,14 @@ event_app_instruction(void *drcontext, void *tag,
 
   static void *prev_tag = NULL;
   static uint prev_module_idx = 0;
+  static bool need_trace = true;
   app_pc ptr = instr_get_app_pc(instr);                           
   if (prev_tag != tag) {
     thread_id_t thread_id = dr_get_thread_id(drcontext);
 
     if (!(prev_module_idx && mi.check_ptr_in_module(ptr, prev_module_idx))) {
       prev_module_idx = mi.get_module_id(ptr);
+      need_trace = mi.need_to_trace(prev_module_idx);
     }
     if (!prev_module_idx) {
         fprintf(logfile, "\n[%p] [thread id = %u] [code is outside modules]:\n", ptr, thread_id);
@@ -59,7 +61,7 @@ event_app_instruction(void *drcontext, void *tag,
     }
     prev_tag = tag;
   }
-
+  if (!need_trace)return DR_EMIT_DEFAULT;
   int64_t m_offset = ptr - mi.get_module_start(prev_module_idx);
  
   {
@@ -102,6 +104,9 @@ dr_client_main(client_id_t id, int argc, const char **argv) {
   }
 
   dr_register_exit_event(event_exit);
+
+  mi = modules_info("module.txt");
+  //for example : mi.module_add_not_trace_by_path("avast", StringWayMatching::contain_case_insensitive);
 
   if (!drmgr_register_bb_instrumentation_event(NULL, event_app_instruction, NULL)) {
     dr_fprintf(STDERR, "bb_instrumentation_event handler wasn't created\n");
