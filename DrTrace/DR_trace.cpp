@@ -14,6 +14,19 @@ typedef int32_t platform_int_t;
 #endif
 
 static void
+instrument_memory_write(instr_t *instr) {
+    size_t size;
+    opnd_t ref;
+    for (int i = 0; i < instr_num_dsts(instr); ++i) {
+        opnd_t dst = instr_get_dst(instr, i);
+        if (opnd_is_memory_reference(dst)) {
+            size = drutil_opnd_mem_size_in_bytes(dst, instr);
+            fprintf(logfile, "(w) dst:? size:%lu ", size);
+        }
+    }
+}
+
+static void
 process_instr(app_pc instr_addr, platform_int_t offset) {
 
   void *drcontext = dr_get_current_drcontext();
@@ -25,13 +38,18 @@ process_instr(app_pc instr_addr, platform_int_t offset) {
   app_pc next_pc = decode(drcontext, instr_addr, &instr);
   int opcode = instr_get_opcode(&instr);
   const char *opcode_name = decode_opcode_name(opcode);
-
   dr_get_mcontext(drcontext, &mc);
   #if defined(X86_64)
   fprintf(logfile, "[%p]:off=%ld %03X - %-6s ", instr_addr, offset, opcode, opcode_name);
-  fprintf(logfile, "REGS: rax=%llx, rbx=%llx, rcx=%llx, rdx=%llx, rflags=%llx\n", mc.rax, mc.rbx, mc.rcx, mc.rdx, mc.rflags);
+  if (instr_writes_memory(&instr)) {
+      instrument_memory_write(&instr);
+  }
+  fprintf(logfile, "REGS: rax=%lx, rbx=%lx, rcx=%lx, rdx=%lx, rflags=%lx\n", mc.rax, mc.rbx, mc.rcx, mc.rdx, mc.rflags);
   #elif defined(X86_32)
   fprintf(logfile, "[%p]:off=%d %03X - %-6s ", instr_addr, offset, opcode, opcode_name);
+   if (instr_writes_memory(&instr)) {
+      instrument_memory_write(&instr);
+  }
   fprintf(logfile, "REGS: eax=%lx, ebx=%lx, ecx=%lx, edx=%lx, eflags=%lx\n", mc.eax, mc.ebx, mc.ecx, mc.edx, mc.eflags);
   #endif
   instr_free(drcontext, &instr);
@@ -104,18 +122,32 @@ dr_client_main(client_id_t id, int argc, const char **argv) {
   }
 
   dr_register_exit_event(event_exit);
-
-  mi = modules_info("module.txt");
   //for example : mi.module_add_not_trace_by_path("avast", StringWayMatching::contain_case_insensitive);
 
   if (!drmgr_register_bb_instrumentation_event(NULL, event_app_instruction, NULL)) {
     dr_fprintf(STDERR, "bb_instrumentation_event handler wasn't created\n");
     DR_ASSERT(false);
   }
-  if (argc > 2 && strcmp(argv[1], "-tf") == 0) {
-    logfd = dr_open_file(argv[2], DR_FILE_WRITE_OVERWRITE);
-  } else {
-    logfd = dr_open_file("trace.txt", DR_FILE_WRITE_OVERWRITE);
+  bool trace_file_specified = false;
+  bool modules_file_specified = false;
+  for (int i = 1; i < argc; ++i) {
+    if (!strcmp(argv[i], "-mf") && i != argc - 1) {
+      mi = modules_info(argv[i + 1]);
+      modules_file_specified = true;
+    } else if (!strcmp(argv[i], "-tf") && i != argc - 1) {
+      logfd = dr_open_file(argv[i + 1], DR_FILE_WRITE_OVERWRITE);
+      trace_file_specified = true;
+    }
+  }
+
+  if (!modules_file_specified) {
+    dr_fprintf(STDERR, "need to specify file for modules\n");
+    DR_ASSERT(false);
+  }
+
+  if (!trace_file_specified) {
+    dr_fprintf(STDERR, "need to specify file for trace\n");
+    DR_ASSERT(false);
   }
   if (logfd == INVALID_FILE) {
     dr_fprintf(STDERR, "cannot open file");
