@@ -1,5 +1,8 @@
 #include "general_headers.h"
 #include "modules_info.hpp"
+#ifdef WINDOWS
+#include <io.h>
+#endif
 
 static modules_info mi;
 
@@ -13,8 +16,11 @@ typedef int64_t platform_int_t;
 typedef int32_t platform_int_t;
 #endif
 
+//#define fprintf if(false)fprintf //TODO:DEL
+
 static void
-instrument_memory_write(instr_t *instr) {
+instrument_memory_write(instr_t *instr)
+{
     size_t size;
     opnd_t ref;
     for (int i = 0; i < instr_num_dsts(instr); ++i) {
@@ -38,16 +44,17 @@ process_instr(app_pc instr_addr, platform_int_t offset) {
   app_pc next_pc = decode(drcontext, instr_addr, &instr);
   int opcode = instr_get_opcode(&instr);
   const char *opcode_name = decode_opcode_name(opcode);
+
   dr_get_mcontext(drcontext, &mc);
   #if defined(X86_64)
-  fprintf(logfile, "[%p]:off=%ld %03X - %-6s ", instr_addr, offset, opcode, opcode_name);
+  fprintf(logfile, "[%p]:off=%lld %03X - %-6s ", instr_addr, offset, opcode, opcode_name);
   if (instr_writes_memory(&instr)) {
       instrument_memory_write(&instr);
   }
-  fprintf(logfile, "REGS: rax=%lx, rbx=%lx, rcx=%lx, rdx=%lx, rflags=%lx\n", mc.rax, mc.rbx, mc.rcx, mc.rdx, mc.rflags);
+  fprintf(logfile, "REGS: rax=%llx, rbx=%llx, rcx=%llx, rdx=%llx, rflags=%llx\n", mc.rax, mc.rbx, mc.rcx, mc.rdx, mc.rflags);
   #elif defined(X86_32)
   fprintf(logfile, "[%p]:off=%d %03X - %-6s ", instr_addr, offset, opcode, opcode_name);
-   if (instr_writes_memory(&instr)) {
+  if (instr_writes_memory(&instr)) {
       instrument_memory_write(&instr);
   }
   fprintf(logfile, "REGS: eax=%lx, ebx=%lx, ecx=%lx, edx=%lx, eflags=%lx\n", mc.eax, mc.ebx, mc.ecx, mc.edx, mc.eflags);
@@ -64,18 +71,40 @@ event_app_instruction(void *drcontext, void *tag,
   static void *prev_tag = NULL;
   static uint prev_module_idx = 0;
   static bool need_trace = true;
+  /*
+  #pragma region CHECK_MODULE
+  static int id_0 = 0;
+  static int id_10 = 0;
+  static int id_11 = 0;
+  #pragma endregion
+  */
   app_pc ptr = instr_get_app_pc(instr);                           
   if (prev_tag != tag) {
     thread_id_t thread_id = dr_get_thread_id(drcontext);
 
     if (!(prev_module_idx && mi.check_ptr_in_module(ptr, prev_module_idx))) {
       prev_module_idx = mi.get_module_id(ptr);
-      need_trace = mi.need_to_trace(prev_module_idx);
     }
+    /*
+    example:
+    #pragma region CHECK_MODULE
+    if (prev_module_idx == 0)id_0++;
+    if (prev_module_idx == 10)id_10++;
+    if (prev_module_idx == 11)id_11++;
+    if(id_0 == 3)  mi.change_traced_modules(E_ModuleRuleAction::Add, E_ModuleRuleType::not_trace_rule, ModuleRuleById(0));
+    if(id_0 == 6)  mi.change_traced_modules(E_ModuleRuleAction::Delete, E_ModuleRuleType::not_trace_rule, ModuleRuleById(0));
+    if (id_10 > 1 && id_11 > 1)
+        mi.change_traced_modules(E_ModuleRuleAction::Add, E_ModuleRuleType::not_trace_exception,
+            ModuleRuleByStr(E_ModuleRuleByStr::by_name, E_StringWayMatching::contain, "BASE"));
+    #pragma endregion
+    */
+    need_trace = mi.need_to_trace(prev_module_idx);
+
+    const char *trace_str = (need_trace ? "" : " [NOT TRACED]");
     if (!prev_module_idx) {
-        fprintf(logfile, "\n[%p] [thread id = %u] [code is outside modules]:\n", ptr, thread_id);
+        fprintf(logfile, "\n[%p] [thread id = %u] [code is outside modules] :%s\n", ptr, thread_id, trace_str);
     } else {
-        fprintf(logfile, "\n[%p] [thread id = %u] [module id = %d]:\n", ptr, thread_id, prev_module_idx);
+        fprintf(logfile, "\n[%p] [thread id = %u] [module id = %u] :%s\n", ptr, thread_id, prev_module_idx, trace_str);
     }
     prev_tag = tag;
   }
@@ -122,36 +151,57 @@ dr_client_main(client_id_t id, int argc, const char **argv) {
   }
 
   dr_register_exit_event(event_exit);
-  //for example : mi.module_add_not_trace_by_path("avast", StringWayMatching::contain_case_insensitive);
+  /*
+  example:
+  #ifndef Module_one_func
+  mi.module_add_not_trace_rule_by_path("avast", E_StringWayMatching::contain_case_insensitive);
+  #else
+  mi.change_traced_modules(E_ModuleRuleAction::Add, E_ModuleRuleType::not_trace_rule,
+      ModuleRuleByStr(E_ModuleRuleByStr::by_path, E_StringWayMatching::contain_case_insensitive, "avast"));
+
+  mi.change_traced_modules(E_ModuleRuleAction::Add, E_ModuleRuleType::not_trace_rule,
+      ModuleRuleByStr(E_ModuleRuleByStr::by_name, E_StringWayMatching::contain, "KERNEL"));
+  #endif
+  */
 
   if (!drmgr_register_bb_instrumentation_event(NULL, event_app_instruction, NULL)) {
-    dr_fprintf(STDERR, "bb_instrumentation_event handler wasn't created\n");
-    DR_ASSERT(false);
+      dr_fprintf(STDERR, "bb_instrumentation_event handler wasn't created\n");
+      DR_ASSERT(false);
   }
   bool trace_file_specified = false;
   bool modules_file_specified = false;
   for (int i = 1; i < argc; ++i) {
-    if (!strcmp(argv[i], "-mf") && i != argc - 1) {
-      mi = modules_info(argv[i + 1]);
-      modules_file_specified = true;
-    } else if (!strcmp(argv[i], "-tf") && i != argc - 1) {
-      logfd = dr_open_file(argv[i + 1], DR_FILE_WRITE_OVERWRITE);
-      trace_file_specified = true;
-    }
+      if (!strcmp(argv[i], "-mf") && i != argc - 1) {
+          mi = modules_info(argv[i + 1]);
+          modules_file_specified = true;
+      } else if (!strcmp(argv[i], "-tf") && i != argc - 1) {
+          logfd = dr_open_file(argv[i + 1], DR_FILE_WRITE_OVERWRITE);
+          trace_file_specified = true;
+      }
   }
 
   if (!modules_file_specified) {
-    dr_fprintf(STDERR, "need to specify file for modules\n");
-    DR_ASSERT(false);
+      dr_fprintf(STDERR, "need to specify file for modules\n");
+      DR_ASSERT(false);
   }
 
   if (!trace_file_specified) {
-    dr_fprintf(STDERR, "need to specify file for trace\n");
-    DR_ASSERT(false);
+      dr_fprintf(STDERR, "need to specify file for trace\n");
+      DR_ASSERT(false);
   }
   if (logfd == INVALID_FILE) {
-    dr_fprintf(STDERR, "cannot open file");
-    DR_ASSERT(false);
+      dr_fprintf(STDERR, "cannot open file");
+      DR_ASSERT(false);
   }
+  #ifdef WINDOWS
+  int fd = _open_osfhandle((intptr_t)logfd, 0);
+  if (fd == -1) {
+      dr_fprintf(STDERR, "cannot open file");
+      DR_ASSERT(false);
+  }
+  _fdopen(fd, "w+");
+  #else
   logfile = fdopen(logfd, "w+");
+  #endif
 }
+
