@@ -372,7 +372,7 @@ bool modules_info::update_traced_module(size_t module_info_id)
         traced_modules.insert(id);
         return false;
     }
-
+    
     std::string prefer_name = std::string(dr_module_preferred_name(modules[id].m_data));
     std::string path = std::string(modules[id].m_data->full_path);
 

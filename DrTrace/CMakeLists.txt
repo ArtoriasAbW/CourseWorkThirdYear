@@ -26,4 +26,4 @@ endfunction (add_sample_client)
 
 configure_DynamoRIO_global(OFF ON)
 
-add_sample_client(programtrace "DR_trace.cpp;modules_info.cpp" "drmgr;drreg;drx")
+add_sample_client(programtrace "DR_trace.cpp;modules_info.cpp" "drmgr;drreg;drx;drutil")

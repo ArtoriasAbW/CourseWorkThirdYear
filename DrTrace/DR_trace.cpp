@@ -19,7 +19,7 @@ typedef int32_t platform_int_t;
 //#define fprintf if(false)fprintf //TODO:DEL
 
 static void
-instrument_memory_write(instr_t *instr)
+instrument_memory_write(instr_t *instr, dr_mcontext_t *mc) 
 {
     size_t size;
     opnd_t ref;
@@ -27,7 +27,8 @@ instrument_memory_write(instr_t *instr)
         opnd_t dst = instr_get_dst(instr, i);
         if (opnd_is_memory_reference(dst)) {
             size = drutil_opnd_mem_size_in_bytes(dst, instr);
-            fprintf(logfile, "(w) dst:? size:%lu ", size);
+            app_pc address = opnd_compute_address(dst, mc);
+            fprintf(logfile, "(w) dst:%p size:%lu ", address, size);
         }
     }
 }
@@ -47,15 +48,15 @@ process_instr(app_pc instr_addr, platform_int_t offset) {
 
   dr_get_mcontext(drcontext, &mc);
   #if defined(X86_64)
-  fprintf(logfile, "[%p]:off=%lld %03X - %-6s ", instr_addr, offset, opcode, opcode_name);
+  fprintf(logfile, "[%p]:off=%ld %03X - %-6s ", instr_addr, offset, opcode, opcode_name);
   if (instr_writes_memory(&instr)) {
-      instrument_memory_write(&instr);
+      instrument_memory_write(&instr, &mc);
   }
-  fprintf(logfile, "REGS: rax=%llx, rbx=%llx, rcx=%llx, rdx=%llx, rflags=%llx\n", mc.rax, mc.rbx, mc.rcx, mc.rdx, mc.rflags);
+  fprintf(logfile, "REGS: rax=%lx, rbx=%lx, rcx=%lx, rdx=%lx, rflags=%lx\n", mc.rax, mc.rbx, mc.rcx, mc.rdx, mc.rflags);
   #elif defined(X86_32)
   fprintf(logfile, "[%p]:off=%d %03X - %-6s ", instr_addr, offset, opcode, opcode_name);
   if (instr_writes_memory(&instr)) {
-      instrument_memory_write(&instr);
+      instrument_memory_write(&instr, &mc);
   }
   fprintf(logfile, "REGS: eax=%lx, ebx=%lx, ecx=%lx, edx=%lx, eflags=%lx\n", mc.eax, mc.ebx, mc.ecx, mc.edx, mc.eflags);
   #endif
