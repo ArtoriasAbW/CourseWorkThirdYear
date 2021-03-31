@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+message TraceHeader {
+    bool memory_trace = 1;
+    uint32 num_of_reg = 2; // ???
+    // 
+}
+
+message MemoryReference {
+    uint32 type = 1;
+    uint64 address = 2;
+    uint32 size = 3;
+    uint32 value = 4;
+}
+
+message Insruction {
+    uint32 opcode = 1;
+    uint64 instr_address = 2;
+    uint64 offset = 3;
+    repeated MemoryReference refs = 4;
+}
+
+message Register {
+    string name = 1;
+    uint64 value = 2;
+}
+
+message Record {
+    Insruction Insruction = 1;
+    repeated Register registers = 2;
+}
+
+message BasicBlockHeader {
+    uint64 thread_id = 1;
+    uint64 module_id = 2;
+    uint64 begin_address = 3;
+}
+
+message BasicBlock {
+    BasicBlockHeader bbhdr = 1;
+    repeated Record records = 2;
+}
+
+
+message Trace {
+    TraceHeader header = 1;
+    repeated BasicBlock data = 2;
+}
