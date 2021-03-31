@@ -5,7 +5,11 @@ set(DynamoRIO_DIR "/home/pavel/DynamoRIO/cmake") # set your path
 project(MyDRIOproject)
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/bin")
-
+set(CMAKE_CXX_STANDARD 17)
+find_package(Protobuf REQUIRED)
+include_directories(${Protobuf_INCLUDE_DIRS})
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
+protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS TraceFormat/format.proto)
 
 # For C clients that only rely on the DR API and not on any 3rd party
 # library routines, we could shrink the size of the client binary
@@ -27,4 +31,4 @@ endfunction (add_sample_client)
 
 configure_DynamoRIO_global(OFF ON)
 
-add_sample_client(tracca "tracca.cpp;utils.cpp" "drmgr;drreg;drx;drutil")
+add_sample_client(tracca "tracca.cpp;utils.cpp;${PROTO_SRCS};${PROTO_HDRS}" "drmgr;drreg;drx;drutil")

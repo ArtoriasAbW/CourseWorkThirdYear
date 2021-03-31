@@ -65,6 +65,9 @@
 #include "drutil.h"
 #include "utils.h"
 
+
+FILE *modules_info;
+
 enum {
     REF_TYPE_READ = 0,
     REF_TYPE_WRITE = 1,
@@ -142,9 +145,14 @@ memtrace(void *drcontext)
 
 /* clean_call dumps the memory reference info to the log file */
 static void
-clean_call(void)
+clean_call(app_pc instr_addr)
 {
     void *drcontext = dr_get_current_drcontext();
+    per_thread_t *data = (per_thread_t *)drmgr_get_tls_field(drcontext, tls_idx);
+    dr_mcontext_t mc = {sizeof(mc), DR_MC_ALL};
+    dr_get_mcontext(drcontext, &mc);
+    fprintf(data->logf, "REGS: xax=%lx, xbx=%lx, xcx=%lx, xdx=%lx, xbp=%lx\n",
+          mc.xax, mc.xbx, mc.xcx, mc.xdx, mc.xsp);
     memtrace(drcontext);
 }
 
@@ -295,29 +303,20 @@ event_app_instruction(void *drcontext, void *tag, instrlist_t *bb, instr_t *inst
     instrument_instr(drcontext, bb, instr);
 
     /* insert code to add an entry for each memory reference opnd */
-    for (i = 0; i < instr_num_srcs(instr); i++) {
-        if (opnd_is_memory_reference(instr_get_src(instr, i)))
-            instrument_mem(drcontext, bb, instr, instr_get_src(instr, i), false);
+    if (instr_reads_memory(instr) || instr_writes_memory(instr)) {
+        for (i = 0; i < instr_num_srcs(instr); i++) {
+            if (opnd_is_memory_reference(instr_get_src(instr, i)))
+                instrument_mem(drcontext, bb, instr, instr_get_src(instr, i), false);
+        }
+
+        for (i = 0; i < instr_num_dsts(instr); i++) {
+            if (opnd_is_memory_reference(instr_get_dst(instr, i)))
+                instrument_mem(drcontext, bb, instr, instr_get_dst(instr, i), true);
+        }
+
     }
 
-    for (i = 0; i < instr_num_dsts(instr); i++) {
-        if (opnd_is_memory_reference(instr_get_dst(instr, i)))
-            instrument_mem(drcontext, bb, instr, instr_get_dst(instr, i), true);
-    }
-
-    /* insert code to call clean_call for processing the buffer */
-    if (/* XXX i#1698: there are constraints for code between ldrex/strex pairs,
-         * so we minimize the instrumentation in between by skipping the clean call.
-         * As we're only inserting instrumentation on a memory reference, and the
-         * app should be avoiding memory accesses in between the ldrex...strex,
-         * the only problematic point should be before the strex.
-         * However, there is still a chance that the instrumentation code may clear the
-         * exclusive monitor state.
-         * Using a fault to handle a full buffer should be more robust, and the
-         * forthcoming buffer filling API (i#513) will provide that.
-         */
-        IF_AARCHXX_ELSE(!instr_is_exclusive_store(instr), true))
-        dr_insert_clean_call(drcontext, bb, instr, (void *)clean_call, false, 0);
+    dr_insert_clean_call(drcontext, bb, instr, (void *)clean_call, false, 1, OPND_CREATE_INTPTR(instr));
 
     return DR_EMIT_DEFAULT;
 }
@@ -384,6 +383,12 @@ event_thread_exit(void *drcontext)
     dr_thread_free(drcontext, data, sizeof(per_thread_t));
 }
 
+
+static void
+event_module_load(void *drcontext, const module_data_t *info, bool loaded) {
+    fprintf(modules_info, "module:%s start[%p] end[%p]\n\n", info->full_path, info->start, info->end);
+}
+
 static void
 event_exit(void)
 {
@@ -396,13 +401,16 @@ event_exit(void)
         !drmgr_unregister_thread_exit_event(event_thread_exit) ||
         !drmgr_unregister_bb_app2app_event(event_bb_app2app) ||
         !drmgr_unregister_bb_insertion_event(event_app_instruction) ||
+        !drmgr_unregister_module_load_event(event_module_load) ||
         drreg_exit() != DRREG_SUCCESS)
         DR_ASSERT(false);
 
     dr_mutex_destroy(mutex);
     drutil_exit();
     drmgr_exit();
+    fclose(modules_info);
 }
+
 
 DR_EXPORT void
 dr_client_main(client_id_t id, int argc, const char *argv[])
@@ -419,11 +427,12 @@ dr_client_main(client_id_t id, int argc, const char *argv[])
     if (!drmgr_register_thread_init_event(event_thread_init) ||
         !drmgr_register_thread_exit_event(event_thread_exit) ||
         !drmgr_register_bb_app2app_event(event_bb_app2app, NULL) ||
-        !drmgr_register_bb_instrumentation_event(NULL /*analysis_func*/,
-                                                 event_app_instruction, NULL))
+        !drmgr_register_bb_instrumentation_event(NULL, event_app_instruction, NULL) ||
+        !drmgr_register_module_load_event(event_module_load))
         DR_ASSERT(false);
 
     client_id = id;
+    modules_info = fopen("module_info.txt", "w");
     mutex = dr_mutex_create();
 
     tls_idx = drmgr_register_tls_field();
