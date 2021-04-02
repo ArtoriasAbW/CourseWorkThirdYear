@@ -32,3 +32,4 @@ endfunction (add_sample_client)
 configure_DynamoRIO_global(OFF ON)
 
 add_sample_client(tracca "tracca.cpp;utils.cpp;${PROTO_SRCS};${PROTO_HDRS}" "drmgr;drreg;drx;drutil")
+target_link_libraries(tracca ${Protobuf_LIBRARIES})

@@ -89,7 +89,8 @@ PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT RecordDefaultTypeInternal _Reco
 constexpr BasicBlockHeader::BasicBlockHeader(
   ::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized)
   : thread_id_(PROTOBUF_ULONGLONG(0))
-  , module_id_(PROTOBUF_ULONGLONG(0)){}
+  , module_id_(PROTOBUF_ULONGLONG(0))
+  , begin_address_(PROTOBUF_ULONGLONG(0)){}
 struct BasicBlockHeaderDefaultTypeInternal {
   constexpr BasicBlockHeaderDefaultTypeInternal()
     : _instance(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized{}) {}
@@ -177,6 +178,7 @@ const ::PROTOBUF_NAMESPACE_ID::uint32 TableStruct_format_2eproto::offsets[] PROT
   ~0u,  // no _weak_field_map_
   PROTOBUF_FIELD_OFFSET(::TraceFormat::BasicBlockHeader, thread_id_),
   PROTOBUF_FIELD_OFFSET(::TraceFormat::BasicBlockHeader, module_id_),
+  PROTOBUF_FIELD_OFFSET(::TraceFormat::BasicBlockHeader, begin_address_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::TraceFormat::BasicBlock, _internal_metadata_),
   ~0u,  // no _extensions_
@@ -199,8 +201,8 @@ static const ::PROTOBUF_NAMESPACE_ID::internal::MigrationSchema schemas[] PROTOB
   { 25, -1, sizeof(::TraceFormat::Register)},
   { 32, -1, sizeof(::TraceFormat::Record)},
   { 39, -1, sizeof(::TraceFormat::BasicBlockHeader)},
-  { 46, -1, sizeof(::TraceFormat::BasicBlock)},
-  { 53, -1, sizeof(::TraceFormat::Trace)},
+  { 47, -1, sizeof(::TraceFormat::BasicBlock)},
+  { 54, -1, sizeof(::TraceFormat::Trace)},
 };
 
 static ::PROTOBUF_NAMESPACE_ID::Message const * const file_default_instances[] = {
@@ -225,17 +227,18 @@ const char descriptor_table_protodef_format_2eproto[] PROTOBUF_SECTION_VARIABLE(
   "Register\022\014\n\004name\030\001 \001(\t\022\r\n\005value\030\002 \001(\004\"_\n"
   "\006Record\022+\n\nInsruction\030\001 \001(\0132\027.TraceForma"
   "t.Insruction\022(\n\tregisters\030\002 \003(\0132\025.TraceF"
-  "ormat.Register\"8\n\020BasicBlockHeader\022\021\n\tth"
-  "read_id\030\001 \001(\004\022\021\n\tmodule_id\030\002 \001(\004\"`\n\nBasi"
-  "cBlock\022,\n\005bbhdr\030\001 \001(\0132\035.TraceFormat.Basi"
-  "cBlockHeader\022$\n\007records\030\002 \003(\0132\023.TraceFor"
-  "mat.Record\"X\n\005Trace\022(\n\006header\030\001 \001(\0132\030.Tr"
-  "aceFormat.TraceHeader\022%\n\004data\030\002 \003(\0132\027.Tr"
-  "aceFormat.BasicBlockb\006proto3"
+  "ormat.Register\"O\n\020BasicBlockHeader\022\021\n\tth"
+  "read_id\030\001 \001(\004\022\021\n\tmodule_id\030\002 \001(\004\022\025\n\rbegi"
+  "n_address\030\003 \001(\004\"`\n\nBasicBlock\022,\n\005bbhdr\030\001"
+  " \001(\0132\035.TraceFormat.BasicBlockHeader\022$\n\007r"
+  "ecords\030\002 \003(\0132\023.TraceFormat.Record\"X\n\005Tra"
+  "ce\022(\n\006header\030\001 \001(\0132\030.TraceFormat.TraceHe"
+  "ader\022%\n\004data\030\002 \003(\0132\027.TraceFormat.BasicBl"
+  "ockb\006proto3"
   ;
 static ::PROTOBUF_NAMESPACE_ID::internal::once_flag descriptor_table_format_2eproto_once;
 const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable descriptor_table_format_2eproto = {
-  false, false, 668, descriptor_table_protodef_format_2eproto, "format.proto", 
+  false, false, 691, descriptor_table_protodef_format_2eproto, "format.proto", 
   &descriptor_table_format_2eproto_once, nullptr, 0, 8,
   schemas, file_default_instances, TableStruct_format_2eproto::offsets,
   file_level_metadata_format_2eproto, file_level_enum_descriptors_format_2eproto, file_level_service_descriptors_format_2eproto,
@@ -1500,16 +1503,16 @@ BasicBlockHeader::BasicBlockHeader(const BasicBlockHeader& from)
   : ::PROTOBUF_NAMESPACE_ID::Message() {
   _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
   ::memcpy(&thread_id_, &from.thread_id_,
-    static_cast<size_t>(reinterpret_cast<char*>(&module_id_) -
-    reinterpret_cast<char*>(&thread_id_)) + sizeof(module_id_));
+    static_cast<size_t>(reinterpret_cast<char*>(&begin_address_) -
+    reinterpret_cast<char*>(&thread_id_)) + sizeof(begin_address_));
   // @@protoc_insertion_point(copy_constructor:TraceFormat.BasicBlockHeader)
 }
 
 void BasicBlockHeader::SharedCtor() {
 ::memset(reinterpret_cast<char*>(this) + static_cast<size_t>(
     reinterpret_cast<char*>(&thread_id_) - reinterpret_cast<char*>(this)),
-    0, static_cast<size_t>(reinterpret_cast<char*>(&module_id_) -
-    reinterpret_cast<char*>(&thread_id_)) + sizeof(module_id_));
+    0, static_cast<size_t>(reinterpret_cast<char*>(&begin_address_) -
+    reinterpret_cast<char*>(&thread_id_)) + sizeof(begin_address_));
 }
 
 BasicBlockHeader::~BasicBlockHeader() {
@@ -1539,8 +1542,8 @@ void BasicBlockHeader::Clear() {
   (void) cached_has_bits;
 
   ::memset(&thread_id_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&module_id_) -
-      reinterpret_cast<char*>(&thread_id_)) + sizeof(module_id_));
+      reinterpret_cast<char*>(&begin_address_) -
+      reinterpret_cast<char*>(&thread_id_)) + sizeof(begin_address_));
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -1562,6 +1565,13 @@ const char* BasicBlockHeader::_InternalParse(const char* ptr, ::PROTOBUF_NAMESPA
       case 2:
         if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 16)) {
           module_id_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+        } else goto handle_unusual;
+        continue;
+      // uint64 begin_address = 3;
+      case 3:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 24)) {
+          begin_address_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
           CHK_(ptr);
         } else goto handle_unusual;
         continue;
@@ -1605,6 +1615,12 @@ failure:
     target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteUInt64ToArray(2, this->_internal_module_id(), target);
   }
 
+  // uint64 begin_address = 3;
+  if (this->begin_address() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteUInt64ToArray(3, this->_internal_begin_address(), target);
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormat::InternalSerializeUnknownFieldsToArray(
         _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
@@ -1633,6 +1649,13 @@ size_t BasicBlockHeader::ByteSizeLong() const {
     total_size += 1 +
       ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::UInt64Size(
         this->_internal_module_id());
+  }
+
+  // uint64 begin_address = 3;
+  if (this->begin_address() != 0) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::UInt64Size(
+        this->_internal_begin_address());
   }
 
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
@@ -1672,6 +1695,9 @@ void BasicBlockHeader::MergeFrom(const BasicBlockHeader& from) {
   if (from.module_id() != 0) {
     _internal_set_module_id(from._internal_module_id());
   }
+  if (from.begin_address() != 0) {
+    _internal_set_begin_address(from._internal_begin_address());
+  }
 }
 
 void BasicBlockHeader::CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) {
@@ -1696,8 +1722,8 @@ void BasicBlockHeader::InternalSwap(BasicBlockHeader* other) {
   using std::swap;
   _internal_metadata_.Swap<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(&other->_internal_metadata_);
   ::PROTOBUF_NAMESPACE_ID::internal::memswap<
-      PROTOBUF_FIELD_OFFSET(BasicBlockHeader, module_id_)
-      + sizeof(BasicBlockHeader::module_id_)
+      PROTOBUF_FIELD_OFFSET(BasicBlockHeader, begin_address_)
+      + sizeof(BasicBlockHeader::begin_address_)
       - PROTOBUF_FIELD_OFFSET(BasicBlockHeader, thread_id_)>(
           reinterpret_cast<char*>(&thread_id_),
           reinterpret_cast<char*>(&other->thread_id_));

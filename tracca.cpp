@@ -1,90 +1,39 @@
-/* ******************************************************************************
- * Copyright (c) 2011-2018 Google, Inc.  All rights reserved.
- * Copyright (c) 2010 Massachusetts Institute of Technology  All rights reserved.
- * ******************************************************************************/
+#include <cstdio>
+#include <cstddef> /* for offsetof */
+#include <fstream>
+#include <vector>
 
-/*
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
- *
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- *
- * * Neither the name of VMware, Inc. nor the names of its contributors may be
- *   used to endorse or promote products derived from this software without
- *   specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL VMWARE, INC. OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
- * DAMAGE.
- */
-
-/* Code Manipulation API Sample:
- * memtrace_simple.c
- *
- * Collects the memory reference information and dumps it to a file as text.
- *
- * (1) It fills a per-thread-buffer with inlined instrumentation.
- * (2) It calls a clean call to dump the buffer into a file.
- *
- * The profile consists of list of <type, size, addr> entries representing
- * - mem ref instr: e.g., { type = 42 (call), size = 5, addr = 0x7f59c2d002d3 }
- * - mem ref info:  e.g., { type = 1 (write), size = 8, addr = 0x7ffeacab0ec8 }.
- *
- * This sample illustrates
- * - the use of drutil_expand_rep_string() to expand string loops to obtain
- *   every memory reference,
- * - the use of drutil_opnd_mem_size_in_bytes() to obtain the size of OP_enter
- *   memory references,
- * - the use of drutil_insert_get_mem_addr() to insert instructions to compute
- *   the address of each memory reference.
- *
- * This client is a simple implementation of a memory reference tracing tool
- * without instrumentation optimization.  Additionally, dumping as
- * text is much slower than dumping as binary.  See memtrace_x86.c for
- * a higher-performance sample.
- */
-
-#include <stdio.h>
-#include <stddef.h> /* for offsetof */
 #include "dr_api.h"
 #include "drmgr.h"
 #include "drreg.h"
 #include "drutil.h"
+
 #include "utils.h"
+#include "format.pb.h"
+
+static FILE *modules_info;
 
 
-FILE *modules_info;
+// protobuf
+static TraceFormat::Trace trace;
+static TraceFormat::TraceHeader trace_hdr;
+static TraceFormat::BasicBlock cur_bb;
+static TraceFormat::Record cur_record;
+static TraceFormat::Insruction cur_instr;
+static std::vector<const module_data_t *> modules;
 
 enum {
     REF_TYPE_READ = 0,
     REF_TYPE_WRITE = 1,
 };
-/* Each mem_ref_t is a <type, size, addr> entry representing a memory reference
- * instruction or the reference information, e.g.:
- * - mem ref instr: { type = 42 (call), size = 5, addr = 0x7f59c2d002d3 }
- * - mem ref info:  { type = 1 (write), size = 8, addr = 0x7ffeacab0ec8 }
- */
+
 typedef struct _mem_ref_t {
     ushort type; /* r(0), w(1), or opcode (assuming 0/1 are invalid opcode) */
     ushort size; /* mem ref size or instr length */
     app_pc addr; /* mem ref addr or instr pc */
 } mem_ref_t;
 
-/* Max number of mem_ref a buffer can have. It should be big enough
- * to hold all entries between clean calls.
+/* Max number of mem_ref a buffer can have.
  */
 #define MAX_NUM_MEM_REFS 4096
 /* The maximum size of buffer for holding mem_refs. */
@@ -114,25 +63,26 @@ static int tls_idx;
 #define TLS_SLOT(tls_base, enum_val) (void **)((byte *)(tls_base) + tls_offs + (enum_val))
 #define BUF_PTR(tls_base) *(mem_ref_t **)TLS_SLOT(tls_base, MEMTRACE_TLS_OFFS_BUF_PTR)
 
-#define MINSERT instrlist_meta_preinsert
 
+
+int get_module_idx_by_address(app_pc address) {
+    for (int i = 0; i < modules.size(); ++i) {
+        if (dr_module_contains_addr(modules[i], address)) {
+            return i;
+        }
+    }
+    return -1;
+}
+// если type > 1 заполняем информацию об инструкции и ждем пока появится следующая инструкция
+// добавляем эту инструкцию в рекорд, очищаем и заполняем новую
+// если type <= 0 заполняем информацию об операндах инструкции cur_instr
 static void
 memtrace(void *drcontext)
 {
-    per_thread_t *data;
-    mem_ref_t *mem_ref, *buf_ptr;
+    per_thread_t *data = (per_thread_t *)drmgr_get_tls_field(drcontext, tls_idx);
+    mem_ref_t *buf_ptr = BUF_PTR(data->seg_base);
 
-    data = (per_thread_t *)drmgr_get_tls_field(drcontext, tls_idx);
-    buf_ptr = BUF_PTR(data->seg_base);
-    /* Example of dumpped file content:
-     *   0x00007f59c2d002d3:  5, call
-     *   0x00007ffeacab0ec8:  8, w
-     */
-    /* We use libc's fprintf as it is buffered and much faster than dr_fprintf
-     * for repeated printing that dominates performance, as the printing does here.
-     */
-    for (mem_ref = (mem_ref_t *)data->buf_base; mem_ref < buf_ptr; mem_ref++) {
-        /* We use PIFX to avoid leading zeroes and shrink the resulting file. */
+    for (mem_ref_t *mem_ref = (mem_ref_t *)data->buf_base; mem_ref < buf_ptr; mem_ref++) {
         fprintf(data->logf, "" PIFX ": %2d, %s\n", (ptr_uint_t)mem_ref->addr,
                 mem_ref->size,
                 (mem_ref->type > REF_TYPE_WRITE)
@@ -144,16 +94,47 @@ memtrace(void *drcontext)
 }
 
 /* clean_call dumps the memory reference info to the log file */
+// скорее всего мы хотим иметь для каждого треда отдельный файл
+// здесь надо заполнять Record (перед этим заполнив instruction) и закинуть этот Record в BasicBlock (
+// вообще возможно стоит несколько изменить структуру)
+/*
+    TraceFormat::Record
+*/
 static void
 clean_call(app_pc instr_addr)
 {
+    // TraceFormat::Record record;
+    // проверить type
+    // record.set_allocated_insruction()
     void *drcontext = dr_get_current_drcontext();
     per_thread_t *data = (per_thread_t *)drmgr_get_tls_field(drcontext, tls_idx);
     dr_mcontext_t mc = {sizeof(mc), DR_MC_ALL};
     dr_get_mcontext(drcontext, &mc);
+    TraceFormat::Register xax;
+    xax.set_name("xax");
+    xax.set_value(mc.xax);
+    TraceFormat::Register xbx;
+    xbx.set_name("xbx");
+    xbx.set_value(mc.xbx);
+    TraceFormat::Register xcx;
+    xcx.set_name("xcx");
+    xcx.set_value(mc.xcx);
+    TraceFormat::Register xdx;
+    xdx.set_name("xdx");
+    xdx.set_value(mc.xdx);
+    TraceFormat::Register xbp;
+    xbp.set_name("xbp");
+    xbp.set_value(mc.xbp);
+    cur_record.mutable_registers()->Add(std::move(xax));
+    cur_record.mutable_registers()->Add(std::move(xbx));
+    cur_record.mutable_registers()->Add(std::move(xcx));
+    cur_record.mutable_registers()->Add(std::move(xdx));
+    cur_record.mutable_registers()->Add(std::move(xdx));
     fprintf(data->logf, "REGS: xax=%lx, xbx=%lx, xcx=%lx, xdx=%lx, xbp=%lx\n",
           mc.xax, mc.xbx, mc.xcx, mc.xdx, mc.xsp);
     memtrace(drcontext);
+    cur_bb.mutable_records->Add(std::move(cur_record));
+    cur_record.Clear();
 }
 
 static void
@@ -167,7 +148,7 @@ static void
 insert_update_buf_ptr(void *drcontext, instrlist_t *ilist, instr_t *where,
                       reg_id_t reg_ptr, int adjust)
 {
-    MINSERT(
+    instrlist_meta_preinsert(
         ilist, where,
         XINST_CREATE_add(drcontext, opnd_create_reg(reg_ptr), OPND_CREATE_INT16(adjust)));
     dr_insert_write_raw_tls(drcontext, ilist, where, tls_seg,
@@ -179,10 +160,10 @@ insert_save_type(void *drcontext, instrlist_t *ilist, instr_t *where, reg_id_t b
                  reg_id_t scratch, ushort type)
 {
     scratch = reg_resize_to_opsz(scratch, OPSZ_2); 
-    MINSERT(ilist, where,
+    instrlist_meta_preinsert(ilist, where,
             XINST_CREATE_load_int(drcontext, opnd_create_reg(scratch), // type in scratch
                                   OPND_CREATE_INT16(type)));
-    MINSERT(ilist, where,
+    instrlist_meta_preinsert(ilist, where,
             XINST_CREATE_store_2bytes(drcontext,
                                       OPND_CREATE_MEM16(base, offsetof(mem_ref_t, type)),  // scrath in sbase + offset 
                                       opnd_create_reg(scratch)));
@@ -193,10 +174,10 @@ insert_save_size(void *drcontext, instrlist_t *ilist, instr_t *where, reg_id_t b
                  reg_id_t scratch, ushort size)
 {
     scratch = reg_resize_to_opsz(scratch, OPSZ_2);
-    MINSERT(ilist, where,
+    instrlist_meta_preinsert(ilist, where,
             XINST_CREATE_load_int(drcontext, opnd_create_reg(scratch),
                                     OPND_CREATE_INT16(size)));
-    MINSERT(ilist, where,
+    instrlist_meta_preinsert(ilist, where,
             XINST_CREATE_store_2bytes(drcontext,
                                       OPND_CREATE_MEM16(base, offsetof(mem_ref_t, size)),
                                       opnd_create_reg(scratch)));
@@ -208,7 +189,7 @@ insert_save_pc(void *drcontext, instrlist_t *ilist, instr_t *where, reg_id_t bas
 {
     instrlist_insert_mov_immed_ptrsz(drcontext, (ptr_int_t)pc, opnd_create_reg(scratch),
                                      ilist, where, NULL, NULL);
-    MINSERT(ilist, where,
+    instrlist_meta_preinsert(ilist, where,
             XINST_CREATE_store(drcontext,
                                OPND_CREATE_MEMPTR(base, offsetof(mem_ref_t, addr)),
                                opnd_create_reg(scratch)));
@@ -218,12 +199,11 @@ static void
 insert_save_addr(void *drcontext, instrlist_t *ilist, instr_t *where, opnd_t ref,
                  reg_id_t reg_ptr, reg_id_t reg_addr)
 {
-    bool ok;
     /* we use reg_ptr as scratch to get addr */
-    ok = drutil_insert_get_mem_addr(drcontext, ilist, where, ref, reg_addr, reg_ptr); // ref in reg_addr
+    bool ok = drutil_insert_get_mem_addr(drcontext, ilist, where, ref, reg_addr, reg_ptr); // ref in reg_addr
     DR_ASSERT(ok);
     insert_load_buf_ptr(drcontext, ilist, where, reg_ptr); // reg_ptr <- needed address
-    MINSERT(ilist, where,
+    instrlist_meta_preinsert(ilist, where,
             XINST_CREATE_store(drcontext,
                                OPND_CREATE_MEMPTR(reg_ptr, offsetof(mem_ref_t, addr)),
                                opnd_create_reg(reg_addr)));
@@ -290,9 +270,19 @@ instrument_mem(void *drcontext, instrlist_t *ilist, instr_t *where, opnd_t ref,
  */
 static dr_emit_flags_t
 event_app_instruction(void *drcontext, void *tag, instrlist_t *bb, instr_t *instr,
-                      bool for_trace, bool translating, void *user_data)
-{
-    int i;
+                      bool for_trace, bool translating, void *user_data) {
+    
+
+    // если новый базовый блок, добавляем старый в протобаф, очищаем текущий и заполняем хедер для нового.
+    static void *old_tag = nullptr;
+    if (old_tag != nullptr && old_tag != tag) {
+        trace.mutable_data()->Add(std::move(cur_bb));
+        cur_bb.Clear();
+        TraceFormat::BasicBlockHeader bb_hdr;
+        bb_hdr.set_module_id(get_module_idx_by_address(dr_fragment_app_pc(tag)));
+        bb_hdr.set_thread_id(1); // only one thread now   
+        tag = old_tag;
+    }
 
     if (!instr_is_app(instr))
         return DR_EMIT_DEFAULT;
@@ -304,12 +294,12 @@ event_app_instruction(void *drcontext, void *tag, instrlist_t *bb, instr_t *inst
 
     /* insert code to add an entry for each memory reference opnd */
     if (instr_reads_memory(instr) || instr_writes_memory(instr)) {
-        for (i = 0; i < instr_num_srcs(instr); i++) {
+        for (int i = 0; i < instr_num_srcs(instr); i++) {
             if (opnd_is_memory_reference(instr_get_src(instr, i)))
                 instrument_mem(drcontext, bb, instr, instr_get_src(instr, i), false);
         }
 
-        for (i = 0; i < instr_num_dsts(instr); i++) {
+        for (int i = 0; i < instr_num_dsts(instr); i++) {
             if (opnd_is_memory_reference(instr_get_dst(instr, i)))
                 instrument_mem(drcontext, bb, instr, instr_get_dst(instr, i), true);
         }
@@ -321,9 +311,7 @@ event_app_instruction(void *drcontext, void *tag, instrlist_t *bb, instr_t *inst
     return DR_EMIT_DEFAULT;
 }
 
-/* We transform string loops into regular loops so we can more easily
- * monitor every memory reference they make.
- */
+
 static dr_emit_flags_t
 event_bb_app2app(void *drcontext, void *tag, instrlist_t *bb, bool for_trace,
                  bool translating)
@@ -354,11 +342,6 @@ event_thread_init(void *drcontext)
 
     data->num_refs = 0;
 
-    /* We're going to dump our data to a per-thread file.
-     * On Windows we need an absolute path so we place it in
-     * the same directory as our library. We could also pass
-     * in a path as a client argument.
-     */
     data->log =
         log_file_open(client_id, drcontext, NULL /* using client lib path */, "memtrace",
 #ifndef WINDOWS
@@ -386,6 +369,7 @@ event_thread_exit(void *drcontext)
 
 static void
 event_module_load(void *drcontext, const module_data_t *info, bool loaded) {
+    modules.push_back(info);
     fprintf(modules_info, "module:%s start[%p] end[%p]\n\n", info->full_path, info->start, info->end);
 }
 
@@ -405,7 +389,11 @@ event_exit(void)
         drreg_exit() != DRREG_SUCCESS)
         DR_ASSERT(false);
 
+
     dr_mutex_destroy(mutex);
+    std::ofstream output("trace.out");
+    trace.SerializeToOstream(&output);
+    output.close();
     drutil_exit();
     drmgr_exit();
     fclose(modules_info);
@@ -415,10 +403,7 @@ event_exit(void)
 DR_EXPORT void
 dr_client_main(client_id_t id, int argc, const char *argv[])
 {
-    /* We need 2 reg slots beyond drreg's eflags slots => 3 slots */
     drreg_options_t ops = { sizeof(ops), 3, false };
-    dr_set_client_name("DynamoRIO Sample Client 'memtrace'",
-                       "http://dynamorio.org/issues");
     if (!drmgr_init() || drreg_init(&ops) != DRREG_SUCCESS || !drutil_init())
         DR_ASSERT(false);
 
@@ -433,17 +418,18 @@ dr_client_main(client_id_t id, int argc, const char *argv[])
 
     client_id = id;
     modules_info = fopen("module_info.txt", "w");
+
+    // TraceFormat::TraceHeader trace_hdr;
+    trace_hdr.set_memory_trace(true);
+    trace_hdr.set_num_of_reg(5);
+    trace.set_allocated_header(&trace_hdr);
     mutex = dr_mutex_create();
 
     tls_idx = drmgr_register_tls_field();
     DR_ASSERT(tls_idx != -1);
-    /* The TLS field provided by DR cannot be directly accessed from the code cache.
-     * For better performance, we allocate raw TLS so that we can directly
-     * access and update it with a single instruction.
-     */
+
     if (!dr_raw_tls_calloc(&tls_seg, &tls_offs, MEMTRACE_TLS_COUNT, 0))
         DR_ASSERT(false);
 
-    /* make it easy to tell, by looking at log file, which client executed */
     dr_log(NULL, DR_LOG_ALL, 1, "Client 'memtrace' initializing\n");
 }

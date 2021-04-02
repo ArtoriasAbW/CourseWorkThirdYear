@@ -1,9 +1,10 @@
 syntax = "proto3";
 
+package TraceFormat;
+
 message TraceHeader {
     bool memory_trace = 1;
-    uint32 num_of_reg = 2; // ???
-    // 
+    uint32 num_of_reg = 2; 
 }
 
 message MemoryReference {
@@ -32,8 +33,7 @@ message Record {
 
 message BasicBlockHeader {
     uint64 thread_id = 1;
-    uint64 module_id = 2;
-    uint64 begin_address = 3;
+    uint64 module_id = 2; // to get info from modules_info.txt (maybe protobuf format in future)
 }
 
 message BasicBlock {
