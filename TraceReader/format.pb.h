@@ -1027,7 +1027,6 @@ class BasicBlockHeader PROTOBUF_FINAL :
   enum : int {
     kThreadIdFieldNumber = 1,
     kModuleIdFieldNumber = 2,
-    kBeginAddressFieldNumber = 3,
   };
   // uint64 thread_id = 1;
   void clear_thread_id();
@@ -1047,15 +1046,6 @@ class BasicBlockHeader PROTOBUF_FINAL :
   void _internal_set_module_id(::PROTOBUF_NAMESPACE_ID::uint64 value);
   public:
 
-  // uint64 begin_address = 3;
-  void clear_begin_address();
-  ::PROTOBUF_NAMESPACE_ID::uint64 begin_address() const;
-  void set_begin_address(::PROTOBUF_NAMESPACE_ID::uint64 value);
-  private:
-  ::PROTOBUF_NAMESPACE_ID::uint64 _internal_begin_address() const;
-  void _internal_set_begin_address(::PROTOBUF_NAMESPACE_ID::uint64 value);
-  public:
-
   // @@protoc_insertion_point(class_scope:TraceFormat.BasicBlockHeader)
  private:
   class _Internal;
@@ -1065,7 +1055,6 @@ class BasicBlockHeader PROTOBUF_FINAL :
   typedef void DestructorSkippable_;
   ::PROTOBUF_NAMESPACE_ID::uint64 thread_id_;
   ::PROTOBUF_NAMESPACE_ID::uint64 module_id_;
-  ::PROTOBUF_NAMESPACE_ID::uint64 begin_address_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_format_2eproto;
 };
@@ -1892,26 +1881,6 @@ inline void BasicBlockHeader::_internal_set_module_id(::PROTOBUF_NAMESPACE_ID::u
 inline void BasicBlockHeader::set_module_id(::PROTOBUF_NAMESPACE_ID::uint64 value) {
   _internal_set_module_id(value);
   // @@protoc_insertion_point(field_set:TraceFormat.BasicBlockHeader.module_id)
-}
-
-// uint64 begin_address = 3;
-inline void BasicBlockHeader::clear_begin_address() {
-  begin_address_ = PROTOBUF_ULONGLONG(0);
-}
-inline ::PROTOBUF_NAMESPACE_ID::uint64 BasicBlockHeader::_internal_begin_address() const {
-  return begin_address_;
-}
-inline ::PROTOBUF_NAMESPACE_ID::uint64 BasicBlockHeader::begin_address() const {
-  // @@protoc_insertion_point(field_get:TraceFormat.BasicBlockHeader.begin_address)
-  return _internal_begin_address();
-}
-inline void BasicBlockHeader::_internal_set_begin_address(::PROTOBUF_NAMESPACE_ID::uint64 value) {
-  
-  begin_address_ = value;
-}
-inline void BasicBlockHeader::set_begin_address(::PROTOBUF_NAMESPACE_ID::uint64 value) {
-  _internal_set_begin_address(value);
-  // @@protoc_insertion_point(field_set:TraceFormat.BasicBlockHeader.begin_address)
 }
 
 // -------------------------------------------------------------------
