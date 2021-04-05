@@ -19,8 +19,9 @@ static TraceFormat::Trace trace;
 static TraceFormat::TraceHeader trace_hdr;
 static TraceFormat::BasicBlock cur_bb;
 static TraceFormat::Record cur_record;
-static TraceFormat::Insruction cur_instr;
 static std::vector<const module_data_t *> modules;
+
+static bool first = true;
 
 enum {
     REF_TYPE_READ = 0,
@@ -83,11 +84,47 @@ memtrace(void *drcontext)
     mem_ref_t *buf_ptr = BUF_PTR(data->seg_base);
 
     for (mem_ref_t *mem_ref = (mem_ref_t *)data->buf_base; mem_ref < buf_ptr; mem_ref++) {
-        fprintf(data->logf, "" PIFX ": %2d, %s\n", (ptr_uint_t)mem_ref->addr,
-                mem_ref->size,
-                (mem_ref->type > REF_TYPE_WRITE)
-                    ? decode_opcode_name(mem_ref->type) /* opcode for instr */
-                    : (mem_ref->type == REF_TYPE_WRITE ? "w" : "r"));
+        if (mem_ref->type > REF_TYPE_WRITE) { // is instruction
+            if (!first) {
+                cur_bb.mutable_records()->Add(std::move(cur_record));
+                cur_record.Clear();
+            } else {
+                first = false;
+            }
+            dr_mcontext_t mc = {sizeof(mc), DR_MC_ALL};
+            dr_get_mcontext(drcontext, &mc);
+            TraceFormat::Register xax;
+            xax.set_name("xax");
+            xax.set_value(mc.xax);
+            TraceFormat::Register xbx;
+            xbx.set_name("xbx");
+            xbx.set_value(mc.xbx);
+            TraceFormat::Register xcx;
+            xcx.set_name("xcx");
+            xcx.set_value(mc.xcx);
+            TraceFormat::Register xdx;
+            xdx.set_name("xdx");
+            xdx.set_value(mc.xdx);
+            TraceFormat::Register xbp;
+            xbp.set_name("xbp");
+            xbp.set_value(mc.xbp);
+            cur_record.mutable_registers()->Add(std::move(xax));
+            cur_record.mutable_registers()->Add(std::move(xbx));
+            cur_record.mutable_registers()->Add(std::move(xcx));
+            cur_record.mutable_registers()->Add(std::move(xdx));
+            cur_record.mutable_registers()->Add(std::move(xdx));
+            cur_record.mutable_insruction()->set_opcode(mem_ref->type);
+            cur_record.mutable_insruction()->set_instr_address(uint64(mem_ref->addr));
+            cur_record.mutable_insruction()->set_offset(0); // need to compute offset
+        } else { // is memref
+            TraceFormat::MemoryReference cur_memref;
+            cur_memref.set_address(uint64(mem_ref->addr));
+            cur_memref.set_size(mem_ref->size);
+            cur_memref.set_type(mem_ref->type);
+            cur_memref.set_value(0); // need to compute value
+            cur_record.mutable_insruction()->mutable_refs()->Add(std::move(cur_memref));
+            cur_memref.Clear();
+        }
         data->num_refs++;
     }
     BUF_PTR(data->seg_base) = data->buf_base;
@@ -103,38 +140,9 @@ memtrace(void *drcontext)
 static void
 clean_call(app_pc instr_addr)
 {
-    // TraceFormat::Record record;
-    // проверить type
-    // record.set_allocated_insruction()
     void *drcontext = dr_get_current_drcontext();
-    per_thread_t *data = (per_thread_t *)drmgr_get_tls_field(drcontext, tls_idx);
-    dr_mcontext_t mc = {sizeof(mc), DR_MC_ALL};
-    dr_get_mcontext(drcontext, &mc);
-    TraceFormat::Register xax;
-    xax.set_name("xax");
-    xax.set_value(mc.xax);
-    TraceFormat::Register xbx;
-    xbx.set_name("xbx");
-    xbx.set_value(mc.xbx);
-    TraceFormat::Register xcx;
-    xcx.set_name("xcx");
-    xcx.set_value(mc.xcx);
-    TraceFormat::Register xdx;
-    xdx.set_name("xdx");
-    xdx.set_value(mc.xdx);
-    TraceFormat::Register xbp;
-    xbp.set_name("xbp");
-    xbp.set_value(mc.xbp);
-    cur_record.mutable_registers()->Add(std::move(xax));
-    cur_record.mutable_registers()->Add(std::move(xbx));
-    cur_record.mutable_registers()->Add(std::move(xcx));
-    cur_record.mutable_registers()->Add(std::move(xdx));
-    cur_record.mutable_registers()->Add(std::move(xdx));
-    fprintf(data->logf, "REGS: xax=%lx, xbx=%lx, xcx=%lx, xdx=%lx, xbp=%lx\n",
-          mc.xax, mc.xbx, mc.xcx, mc.xdx, mc.xsp);
+    // per_thread_t *data = (per_thread_t *)drmgr_get_tls_field(drcontext, tls_idx);
     memtrace(drcontext);
-    cur_bb.mutable_records->Add(std::move(cur_record));
-    cur_record.Clear();
 }
 
 static void
@@ -278,11 +286,15 @@ event_app_instruction(void *drcontext, void *tag, instrlist_t *bb, instr_t *inst
     if (old_tag != nullptr && old_tag != tag) {
         trace.mutable_data()->Add(std::move(cur_bb));
         cur_bb.Clear();
-        TraceFormat::BasicBlockHeader bb_hdr;
-        bb_hdr.set_module_id(get_module_idx_by_address(dr_fragment_app_pc(tag)));
-        bb_hdr.set_thread_id(1); // only one thread now   
-        tag = old_tag;
+        cur_bb.mutable_bbhdr()->set_module_id(get_module_idx_by_address((dr_fragment_app_pc(tag))));
+        cur_bb.mutable_bbhdr()->set_thread_id(1);
+        first = true; // next instr is first
     }
+    if (old_tag == nullptr) {
+        cur_bb.mutable_bbhdr()->set_module_id(get_module_idx_by_address((dr_fragment_app_pc(tag))));
+        cur_bb.mutable_bbhdr()->set_thread_id(1);
+    }
+    old_tag = tag;
 
     if (!instr_is_app(instr))
         return DR_EMIT_DEFAULT;
@@ -318,7 +330,6 @@ event_bb_app2app(void *drcontext, void *tag, instrlist_t *bb, bool for_trace,
 {
     if (!drutil_expand_rep_string(drcontext, bb)) {
         DR_ASSERT(false);
-        /* in release build, carry on: we'll just miss per-iter refs */
     }
     return DR_EMIT_DEFAULT;
 }
@@ -342,14 +353,14 @@ event_thread_init(void *drcontext)
 
     data->num_refs = 0;
 
-    data->log =
-        log_file_open(client_id, drcontext, NULL /* using client lib path */, "memtrace",
-#ifndef WINDOWS
-                      DR_FILE_CLOSE_ON_FORK |
-#endif
-                          DR_FILE_ALLOW_LARGE);
-    data->logf = log_stream_from_file(data->log);
-    fprintf(data->logf, "Format: <data address>: <data size>, <(r)ead/(w)rite/opcode>\n");
+//     data->log =
+//         log_file_open(client_id, drcontext, NULL /* using client lib path */, "memtrace",
+// #ifndef WINDOWS
+//                       DR_FILE_CLOSE_ON_FORK |
+// #endif
+//                           DR_FILE_ALLOW_LARGE);
+//     data->logf = log_stream_from_file(data->log);
+//     fprintf(data->logf, "Format: <data address>: <data size>, <(r)ead/(w)rite/opcode>\n");
 }
 
 static void
@@ -361,7 +372,7 @@ event_thread_exit(void *drcontext)
     dr_mutex_lock(mutex);
     num_refs += data->num_refs;
     dr_mutex_unlock(mutex);
-    log_stream_close(data->logf); /* closes fd too */
+    // log_stream_close(data->logf); /* closes fd too */
     dr_raw_mem_free(data->buf_base, MEM_BUF_SIZE);
     dr_thread_free(drcontext, data, sizeof(per_thread_t));
 }
@@ -376,7 +387,6 @@ event_module_load(void *drcontext, const module_data_t *info, bool loaded) {
 static void
 event_exit(void)
 {
-    dr_log(NULL, DR_LOG_ALL, 1, "Client 'memtrace' num refs seen: " SZFMT "\n", num_refs);
     if (!dr_raw_tls_cfree(tls_offs, MEMTRACE_TLS_COUNT))
         DR_ASSERT(false);
 
@@ -419,7 +429,6 @@ dr_client_main(client_id_t id, int argc, const char *argv[])
     client_id = id;
     modules_info = fopen("module_info.txt", "w");
 
-    // TraceFormat::TraceHeader trace_hdr;
     trace_hdr.set_memory_trace(true);
     trace_hdr.set_num_of_reg(5);
     trace.set_allocated_header(&trace_hdr);
@@ -431,5 +440,4 @@ dr_client_main(client_id_t id, int argc, const char *argv[])
     if (!dr_raw_tls_calloc(&tls_seg, &tls_offs, MEMTRACE_TLS_COUNT, 0))
         DR_ASSERT(false);
 
-    dr_log(NULL, DR_LOG_ALL, 1, "Client 'memtrace' initializing\n");
 }
