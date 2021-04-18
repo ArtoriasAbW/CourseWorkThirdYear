@@ -557,13 +557,13 @@ class Insruction PROTOBUF_FINAL :
   void _internal_set_instr_address(::PROTOBUF_NAMESPACE_ID::uint64 value);
   public:
 
-  // uint64 offset = 3;
+  // int64 offset = 3;
   void clear_offset();
-  ::PROTOBUF_NAMESPACE_ID::uint64 offset() const;
-  void set_offset(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  ::PROTOBUF_NAMESPACE_ID::int64 offset() const;
+  void set_offset(::PROTOBUF_NAMESPACE_ID::int64 value);
   private:
-  ::PROTOBUF_NAMESPACE_ID::uint64 _internal_offset() const;
-  void _internal_set_offset(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  ::PROTOBUF_NAMESPACE_ID::int64 _internal_offset() const;
+  void _internal_set_offset(::PROTOBUF_NAMESPACE_ID::int64 value);
   public:
 
   // uint32 opcode = 1;
@@ -584,7 +584,7 @@ class Insruction PROTOBUF_FINAL :
   typedef void DestructorSkippable_;
   ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::TraceFormat::MemoryReference > refs_;
   ::PROTOBUF_NAMESPACE_ID::uint64 instr_address_;
-  ::PROTOBUF_NAMESPACE_ID::uint64 offset_;
+  ::PROTOBUF_NAMESPACE_ID::int64 offset_;
   ::PROTOBUF_NAMESPACE_ID::uint32 opcode_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_format_2eproto;
@@ -1569,22 +1569,22 @@ inline void Insruction::set_instr_address(::PROTOBUF_NAMESPACE_ID::uint64 value)
   // @@protoc_insertion_point(field_set:TraceFormat.Insruction.instr_address)
 }
 
-// uint64 offset = 3;
+// int64 offset = 3;
 inline void Insruction::clear_offset() {
-  offset_ = PROTOBUF_ULONGLONG(0);
+  offset_ = PROTOBUF_LONGLONG(0);
 }
-inline ::PROTOBUF_NAMESPACE_ID::uint64 Insruction::_internal_offset() const {
+inline ::PROTOBUF_NAMESPACE_ID::int64 Insruction::_internal_offset() const {
   return offset_;
 }
-inline ::PROTOBUF_NAMESPACE_ID::uint64 Insruction::offset() const {
+inline ::PROTOBUF_NAMESPACE_ID::int64 Insruction::offset() const {
   // @@protoc_insertion_point(field_get:TraceFormat.Insruction.offset)
   return _internal_offset();
 }
-inline void Insruction::_internal_set_offset(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+inline void Insruction::_internal_set_offset(::PROTOBUF_NAMESPACE_ID::int64 value) {
   
   offset_ = value;
 }
-inline void Insruction::set_offset(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+inline void Insruction::set_offset(::PROTOBUF_NAMESPACE_ID::int64 value) {
   _internal_set_offset(value);
   // @@protoc_insertion_point(field_set:TraceFormat.Insruction.offset)
 }

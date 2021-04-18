@@ -1,12 +1,12 @@
 module:/home/pavel/DynamoRIO/lib64/release/libdynamorio.so start[0x71000000] end[0x7142d000]
 
-module:/home/pavel/libtracca/bin/libtracca.so start[0x7f20bbe93000] end[0x7f20bbed6000]
+module:/home/pavel/libtracca/bin/libtracca.so start[0x7f0074f66000] end[0x7f0074fa9000]
 
-module:/home/pavel/libtracca/empty start[0x7f20fbe93000] end[0x7f20fbe98000]
+module:/home/pavel/libtracca/empty start[0x7f00b4f66000] end[0x7f00b4f6b000]
 
-module:/usr/lib/ld-2.33.so start[0x7f20ffe65000] end[0x7f20ffe98000]
+module:/usr/lib/ld-2.33.so start[0x7f00b8f38000] end[0x7f00b8f6b000]
 
-module:[vdso] start[0x7ffffd5da000] end[0x7ffffd5dc000]
+module:[vdso] start[0x7ffde1890000] end[0x7ffde1892000]
 
-module:/usr/lib/libc-2.33.so start[0x7f20ff335000] end[0x7f20ff502000]
+module:/usr/lib/libc-2.33.so start[0x7f00b8408000] end[0x7f00b85d5000]
 

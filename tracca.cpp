@@ -13,6 +13,10 @@
 
 static FILE *modules_info;
 
+// struct Module {
+//     uint64_t module_id;
+//     const module_data_t *module_data;
+// };
 
 // protobuf
 static TraceFormat::Trace trace;
@@ -32,6 +36,7 @@ typedef struct _mem_ref_t {
     ushort type; /* r(0), w(1), or opcode (assuming 0/1 are invalid opcode) */
     ushort size; /* mem ref size or instr length */
     app_pc addr; /* mem ref addr or instr pc */
+    uint64_t value; // only for mem ref
 } mem_ref_t;
 
 /* Max number of mem_ref a buffer can have.
@@ -115,7 +120,12 @@ memtrace(void *drcontext)
             cur_record.mutable_registers()->Add(std::move(xdx));
             cur_record.mutable_insruction()->set_opcode(mem_ref->type);
             cur_record.mutable_insruction()->set_instr_address(uint64(mem_ref->addr));
-            cur_record.mutable_insruction()->set_offset(0); // need to compute offset
+            int64 offset = -1;
+            module_data_t *module_data = dr_lookup_module(mem_ref->addr);
+            if (module_data != NULL) {
+                offset = (int64_t)(mem_ref->addr) - (int64_t)(module_data->start);
+            }
+            cur_record.mutable_insruction()->set_offset(offset); // need to compute offset
         } else { // is memref
             TraceFormat::MemoryReference cur_memref;
             cur_memref.set_address(uint64(mem_ref->addr));
@@ -123,7 +133,7 @@ memtrace(void *drcontext)
             cur_memref.set_type(mem_ref->type);
             cur_memref.set_value(0); // need to compute value
             cur_record.mutable_insruction()->mutable_refs()->Add(std::move(cur_memref));
-            cur_memref.Clear();
+            cur_memref.Clear();     
         }
         data->num_refs++;
     }
@@ -266,6 +276,8 @@ instrument_mem(void *drcontext, instrlist_t *ilist, instr_t *where, opnd_t ref,
                      write ? REF_TYPE_WRITE : REF_TYPE_READ);
     insert_save_size(drcontext, ilist, where, reg_ptr, reg_tmp,
                      (ushort)drutil_opnd_mem_size_in_bytes(ref, where));
+    
+    // insert_save_value(drcontext, ilist, where, reg_ptr, reg_tmp, *opnd_compute_address())
     insert_update_buf_ptr(drcontext, ilist, where, reg_ptr, sizeof(mem_ref_t));
     /* Restore scratch registers */
     if (drreg_unreserve_register(drcontext, ilist, where, reg_ptr) != DRREG_SUCCESS ||
@@ -283,15 +295,16 @@ event_app_instruction(void *drcontext, void *tag, instrlist_t *bb, instr_t *inst
 
     // если новый базовый блок, добавляем старый в протобаф, очищаем текущий и заполняем хедер для нового.
     static void *old_tag = nullptr;
+    module_data_t *module_data = dr_lookup_module(dr_fragment_app_pc(tag));
     if (old_tag != nullptr && old_tag != tag) {
         trace.mutable_data()->Add(std::move(cur_bb));
         cur_bb.Clear();
-        cur_bb.mutable_bbhdr()->set_module_id(get_module_idx_by_address((dr_fragment_app_pc(tag))));
+        cur_bb.mutable_bbhdr()->set_module_path(module_data != NULL ? module_data->full_path : "Unknown");
         cur_bb.mutable_bbhdr()->set_thread_id(1);
         first = true; // next instr is first
     }
     if (old_tag == nullptr) {
-        cur_bb.mutable_bbhdr()->set_module_id(get_module_idx_by_address((dr_fragment_app_pc(tag))));
+        cur_bb.mutable_bbhdr()->set_module_path(module_data != NULL ? module_data->full_path : "Unknown");
         cur_bb.mutable_bbhdr()->set_thread_id(1);
     }
     old_tag = tag;

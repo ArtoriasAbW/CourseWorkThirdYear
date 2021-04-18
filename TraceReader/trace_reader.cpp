@@ -17,8 +17,10 @@ int main(int argc, char *argv[]) {
     std::cout << trace.data(0).bbhdr().thread_id() << std::endl;
     // std::cout << trace.data(1).records().size() << std::endl;
     std::cout << "Instructions:" << std::endl;
-    for (int i = 0; i < trace.data(1).records().size(); ++i) {
-        std::cout << trace.data(1).records(i).insruction().opcode() << std::endl;
+    for (int j = 0; j < trace.data_size(); ++j) {
+        for (int i = 0; i < trace.data(j).records().size(); ++i) {
+            std::cout << trace.data(j).records(i).insruction().offset() << std::endl;
+        }
     }
     // std::cout << trace.data(1).records(1).insruction().opcode() << std::endl;
     // std::cout << trace.data(1).records(1).insruction().instr_address() << std::endl;

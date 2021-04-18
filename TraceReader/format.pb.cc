@@ -49,7 +49,7 @@ constexpr Insruction::Insruction(
   ::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized)
   : refs_()
   , instr_address_(PROTOBUF_ULONGLONG(0))
-  , offset_(PROTOBUF_ULONGLONG(0))
+  , offset_(PROTOBUF_LONGLONG(0))
   , opcode_(0u){}
 struct InsructionDefaultTypeInternal {
   constexpr InsructionDefaultTypeInternal()
@@ -220,7 +220,7 @@ const char descriptor_table_protodef_format_2eproto[] PROTOBUF_SECTION_VARIABLE(
   " \001(\r\"M\n\017MemoryReference\022\014\n\004type\030\001 \001(\r\022\017\n"
   "\007address\030\002 \001(\004\022\014\n\004size\030\003 \001(\r\022\r\n\005value\030\004 "
   "\001(\r\"o\n\nInsruction\022\016\n\006opcode\030\001 \001(\r\022\025\n\rins"
-  "tr_address\030\002 \001(\004\022\016\n\006offset\030\003 \001(\004\022*\n\004refs"
+  "tr_address\030\002 \001(\004\022\016\n\006offset\030\003 \001(\003\022*\n\004refs"
   "\030\004 \003(\0132\034.TraceFormat.MemoryReference\"\'\n\010"
   "Register\022\014\n\004name\030\001 \001(\t\022\r\n\005value\030\002 \001(\004\"_\n"
   "\006Record\022+\n\nInsruction\030\001 \001(\0132\027.TraceForma"
@@ -826,7 +826,7 @@ const char* Insruction::_InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID:
           CHK_(ptr);
         } else goto handle_unusual;
         continue;
-      // uint64 offset = 3;
+      // int64 offset = 3;
       case 3:
         if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 24)) {
           offset_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
@@ -885,10 +885,10 @@ failure:
     target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteUInt64ToArray(2, this->_internal_instr_address(), target);
   }
 
-  // uint64 offset = 3;
+  // int64 offset = 3;
   if (this->offset() != 0) {
     target = stream->EnsureSpace(target);
-    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteUInt64ToArray(3, this->_internal_offset(), target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteInt64ToArray(3, this->_internal_offset(), target);
   }
 
   // repeated .TraceFormat.MemoryReference refs = 4;
@@ -929,10 +929,10 @@ size_t Insruction::ByteSizeLong() const {
         this->_internal_instr_address());
   }
 
-  // uint64 offset = 3;
+  // int64 offset = 3;
   if (this->offset() != 0) {
     total_size += 1 +
-      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::UInt64Size(
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::Int64Size(
         this->_internal_offset());
   }
 
