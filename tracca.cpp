@@ -1,7 +1,10 @@
 #include <cstdio>
-#include <cstddef> /* for offsetof */
+#include <cstddef> 
 #include <fstream>
 #include <vector>
+#include <set>
+#include <string>
+#include <fstream>
 
 #include "dr_api.h"
 #include "drmgr.h"
@@ -13,17 +16,15 @@
 
 static FILE *modules_info;
 
-// struct Module {
-//     uint64_t module_id;
-//     const module_data_t *module_data;
-// };
-
 // protobuf
 static TraceFormat::Trace trace;
 static TraceFormat::TraceHeader trace_hdr;
 static TraceFormat::BasicBlock cur_bb;
 static TraceFormat::Record cur_record;
 static std::vector<const module_data_t *> modules;
+
+// trace control
+static std::set<std::string> not_traced_modules;
 
 static bool first = true;
 
@@ -125,7 +126,7 @@ memtrace(void *drcontext)
             if (module_data != NULL) {
                 offset = (int64_t)(mem_ref->addr) - (int64_t)(module_data->start);
             }
-            cur_record.mutable_insruction()->set_offset(offset); // need to compute offset
+            cur_record.mutable_insruction()->set_offset(offset);
         } else { // is memref
             TraceFormat::MemoryReference cur_memref;
             cur_memref.set_address(uint64(mem_ref->addr));
@@ -148,7 +149,7 @@ memtrace(void *drcontext)
     TraceFormat::Record
 */
 static void
-clean_call(app_pc instr_addr)
+clean_call()
 {
     void *drcontext = dr_get_current_drcontext();
     // per_thread_t *data = (per_thread_t *)drmgr_get_tls_field(drcontext, tls_idx);
@@ -227,6 +228,15 @@ insert_save_addr(void *drcontext, instrlist_t *ilist, instr_t *where, opnd_t ref
                                opnd_create_reg(reg_addr)));
 }
 
+// static void
+// insert_save_value(void *drcontext, intstr_t *ilist, instr_t *where, opnd_t ref,
+//                   reg_id_t reg_ptr, reg_id_t reg_addr)
+// {
+//     bool ok = drutil_insert_get_mem_addr(drcontext, ilist, where, ref, reg_addr, reg_ptr);
+//     uint64_t value = 0; // Есть ли универсальный способ хранить значение?
+//     instrlist_meta_postinsert(ilist, where, XINST_CREATE_store(drcontext ))
+// }
+
 /* insert inline code to add an instruction entry into the buffer */
 static void
 instrument_instr(void *drcontext, instrlist_t *ilist, instr_t *where)
@@ -292,10 +302,19 @@ static dr_emit_flags_t
 event_app_instruction(void *drcontext, void *tag, instrlist_t *bb, instr_t *instr,
                       bool for_trace, bool translating, void *user_data) {
     
+    
+
+    if (!instr_is_app(instr))
+        return DR_EMIT_DEFAULT;
+    if (!instr_reads_memory(instr) && !instr_writes_memory(instr))
+        return DR_EMIT_DEFAULT;
 
     // если новый базовый блок, добавляем старый в протобаф, очищаем текущий и заполняем хедер для нового.
     static void *old_tag = nullptr;
     module_data_t *module_data = dr_lookup_module(dr_fragment_app_pc(tag));
+    if (not_traced_modules.find(module_data->full_path) != not_traced_modules.end()) {
+        return DR_EMIT_DEFAULT;
+    }
     if (old_tag != nullptr && old_tag != tag) {
         trace.mutable_data()->Add(std::move(cur_bb));
         cur_bb.Clear();
@@ -308,11 +327,6 @@ event_app_instruction(void *drcontext, void *tag, instrlist_t *bb, instr_t *inst
         cur_bb.mutable_bbhdr()->set_thread_id(1);
     }
     old_tag = tag;
-
-    if (!instr_is_app(instr))
-        return DR_EMIT_DEFAULT;
-    if (!instr_reads_memory(instr) && !instr_writes_memory(instr))
-        return DR_EMIT_DEFAULT;
 
     /* insert code to add an entry for app instruction */
     instrument_instr(drcontext, bb, instr);
@@ -331,7 +345,7 @@ event_app_instruction(void *drcontext, void *tag, instrlist_t *bb, instr_t *inst
 
     }
 
-    dr_insert_clean_call(drcontext, bb, instr, (void *)clean_call, false, 1, OPND_CREATE_INTPTR(instr));
+    dr_insert_clean_call(drcontext, bb, instr, (void *)clean_call, false, 0);
 
     return DR_EMIT_DEFAULT;
 }
@@ -414,7 +428,7 @@ event_exit(void)
 
 
     dr_mutex_destroy(mutex);
-    std::ofstream output("trace.out");
+    std::ofstream output("out/trace");
     trace.SerializeToOstream(&output);
     output.close();
     drutil_exit();
@@ -426,6 +440,15 @@ event_exit(void)
 DR_EXPORT void
 dr_client_main(client_id_t id, int argc, const char *argv[])
 {
+
+    // adding not traced modules
+    std::ifstream not_traced_modules_file("not_traced_modules.txt");
+    std::string module;
+    while (std::getline(not_traced_modules_file, module)) {
+        not_traced_modules.insert(module);
+    }
+    not_traced_modules_file.close();
+
     drreg_options_t ops = { sizeof(ops), 3, false };
     if (!drmgr_init() || drreg_init(&ops) != DRREG_SUCCESS || !drutil_init())
         DR_ASSERT(false);
@@ -440,7 +463,7 @@ dr_client_main(client_id_t id, int argc, const char *argv[])
         DR_ASSERT(false);
 
     client_id = id;
-    modules_info = fopen("module_info.txt", "w");
+    modules_info = fopen("out/module_info.txt", "w");
 
     trace_hdr.set_memory_trace(true);
     trace_hdr.set_num_of_reg(5);

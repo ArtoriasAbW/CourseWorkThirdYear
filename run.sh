@@ -1,3 +1,3 @@
 #!/bin/bash
 
-../DynamoRIO/bin64/drrun -c bin/libtracca.so -- empty
+../DynamoRIO/bin64/drrun -c bin/libtracca.so -- "${@:1}"

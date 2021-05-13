@@ -1,0 +1,3 @@
+/usr/lib/ld-2.33.so
+/usr/lib/libc-2.33.so
+/home/pavel/DynamoRIO/lib64/release/libdynamorio.so
